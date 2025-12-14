@@ -87,5 +87,22 @@ export const refreshAccessToken = async (token: string) => {
     throw new ApiError(401, "Refresh token revoked");
   }
 
-  return signAccessToken({ userId: payload.userId });
+  // rotate
+
+  await pool.query("DELETE FROM refresh_tokens WHERE token = $1", [token]);
+
+  const newRefreshToken = signRefreshToken({ userId: payload.userId });
+
+  await pool.query(
+    `
+    INSERT INTO refresh_tokens (id, user_id, token, expires_at)
+    VALUES ($1, $2, $3, now() + interval '7 days')
+    `,
+    [randomUUID(), payload.userId, newRefreshToken]
+  );
+
+  return {
+    accessToken: signAccessToken({ userId: payload.userId }),
+    refreshToken: newRefreshToken,
+  };
 };

@@ -15,7 +15,7 @@ export const requireRole =
       `
         SELECT 1
         FROM user_roles ur
-        JOIN roles ON r.id = ur.role_id
+        JOIN roles r ON r.id = ur.role_id
         WHERE ur.user_id = $1 AND r.name = $2
 
         `,
