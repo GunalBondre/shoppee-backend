@@ -1,9 +1,5 @@
 import { pool } from "../db";
 
-/**
- * Cleans up expired refresh tokens from the database
- * This should be run periodically (e.g., every hour or daily)
- */
 export const cleanupExpiredTokens = async (): Promise<number> => {
   try {
     const result = await pool.query(
@@ -11,7 +7,7 @@ export const cleanupExpiredTokens = async (): Promise<number> => {
     );
 
     const deletedCount = result.rowCount || 0;
-    
+
     if (deletedCount > 0) {
       console.log(`🧹 Cleaned up ${deletedCount} expired refresh token(s)`);
     }
@@ -27,7 +23,9 @@ export const cleanupExpiredTokens = async (): Promise<number> => {
  * Starts a scheduled job to clean up expired tokens
  * @param intervalMinutes - How often to run cleanup (default: 60 minutes)
  */
-export const startTokenCleanupJob = (intervalMinutes: number = 60): NodeJS.Timeout => {
+export const startTokenCleanupJob = (
+  intervalMinutes: number = 60
+): NodeJS.Timeout => {
   // Run immediately on start
   cleanupExpiredTokens().catch((err) => {
     console.error("Initial token cleanup failed:", err);
@@ -41,7 +39,9 @@ export const startTokenCleanupJob = (intervalMinutes: number = 60): NodeJS.Timeo
     });
   }, intervalMs);
 
-  console.log(`✅ Token cleanup job started (runs every ${intervalMinutes} minutes)`);
+  console.log(
+    `✅ Token cleanup job started (runs every ${intervalMinutes} minutes)`
+  );
 
   return interval;
 };
@@ -53,4 +53,3 @@ export const stopTokenCleanupJob = (interval: NodeJS.Timeout): void => {
   clearInterval(interval);
   console.log("🛑 Token cleanup job stopped");
 };
-

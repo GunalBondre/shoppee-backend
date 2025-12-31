@@ -17,7 +17,7 @@ export const pool = new Pool({
   database: process.env.DB_NAME,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD || "", // Ensure it's always a string
-  max: 10, // max connections
+  max: 1000, // max connections
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
 });
