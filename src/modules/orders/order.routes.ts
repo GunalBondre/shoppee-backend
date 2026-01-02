@@ -3,7 +3,12 @@ import { Router } from "express";
 import { requireAuth } from "../../middlewares/auth.middleware";
 import { validate } from "../../middlewares/validate.middleware";
 import { createOrderSchema } from "./order.schema";
-import { getOrdersForLoggedInUser, orderService } from "./order.service";
+import {
+  getOrdersForLoggedInUser,
+  createOrder,
+  updateOrderStatus,
+} from "./order.service";
+import { OrderStatus } from "./orders.constants";
 
 const router = Router();
 
@@ -46,7 +51,7 @@ router.post(
     const userId = (req as any).user.id;
     const { items } = req.body;
 
-    const order = await orderService(userId, items);
+    const order = await createOrder(userId, items);
     res.status(201).json(order);
   }
 );
@@ -91,6 +96,55 @@ router.get("/orders", requireAuth, async (req, res) => {
   const userId = (req as any).user.id;
   const orders = await getOrdersForLoggedInUser(userId);
   res.json(orders);
+});
+
+/**
+ * @swagger
+ * /orders/{id}/cancel:
+ *   post:
+ *     summary: Cancel an order
+ *     description: >
+ *       Cancels an order if it is still in a cancellable state
+ *       (CREATED or PAID). Orders that are already SHIPPED or
+ *       DELIVERED cannot be cancelled.
+ *     tags:
+ *       - Orders
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Order ID to cancel
+ *     responses:
+ *       200:
+ *         description: Order cancelled successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Order cancelled
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Order not found
+ *       409:
+ *         description: Order cannot be cancelled in its current state
+ */
+
+router.post("/orders/:id/cancel", requireAuth, async (req, res) => {
+  const userId = (req as any).user.id;
+  const orderId = req.params.id;
+
+  await updateOrderStatus(userId, orderId, OrderStatus.CANCELLED);
+
+  res.json({ message: "Order cancelled" });
 });
 
 export default router;

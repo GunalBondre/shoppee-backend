@@ -1,8 +1,10 @@
 import { randomUUID } from "crypto";
 import { pool } from "../../db";
 import { ApiError } from "../../utils/apiErrors";
+import { OrderStatus } from "./orders.constants";
+import { allowedTransitions } from "./orders.transactions";
 
-export const orderService = async (
+export const createOrder = async (
   userId: string,
   items: { productId: string; quantity: number }[]
 ) => {
@@ -12,12 +14,17 @@ export const orderService = async (
     const productIds = items.map((i) => i.productId);
     const res = await client.query(
       `
-      SELECT id, name, price
+      SELECT id, name, price,stock
       FROM products
       WHERE id = ANY($1::uuid[])
+      FOR UPDATE
       `,
       [productIds]
     );
+
+    if (!res.rowCount) {
+      throw new ApiError(400, "Product not found");
+    }
 
     if (res.rowCount !== items.length) {
       throw new ApiError(400, "Invalid product in order");
@@ -25,19 +32,32 @@ export const orderService = async (
 
     let totalAmount = 0;
 
-    const orderItems = res.rows.map((product) => {
-      const item = items.find((i) => i.productId === product.id);
-      const lineTotal = product.price * item!.quantity;
-      totalAmount += lineTotal;
+    const orderItems = await Promise.all(
+      res.rows.map(async (product) => {
+        const item = items.find((i) => i.productId === product.id)!;
 
-      return {
-        productId: product.id,
-        productName: product.name,
-        unitPrice: product.price,
-        quantity: item!.quantity,
-        lineTotal,
-      };
-    });
+        if (product.stock < item.quantity) {
+          throw new ApiError(409, "Insufficient stock");
+        }
+
+        await client.query(
+          `UPDATE products SET stock = stock - $1 WHERE id = $2`,
+          [item.quantity, product.id]
+        );
+
+        const lineTotal = product.price * item.quantity;
+
+        return {
+          productId: product.id,
+          productName: product.name,
+          unitPrice: product.price,
+          quantity: item.quantity,
+          lineTotal,
+        };
+      })
+    );
+
+    totalAmount = orderItems.reduce((sum, item) => sum + item.lineTotal, 0);
 
     const orderId = randomUUID();
     await client.query(
@@ -123,4 +143,33 @@ export const getOrdersForLoggedInUser = async (userId: string) => {
     });
   }
   return Array.from(ordersMap.values());
+};
+
+export const updateOrderStatus = async (
+  userId: string,
+  orderId: string,
+  nextStatus: OrderStatus
+) => {
+  const res = await pool.query(
+    `SELECT status from orders WHERE id = $1 AND user_id = $2`,
+    [orderId, userId]
+  );
+
+  if (!res.rowCount) {
+    throw new ApiError(404, "Order not found");
+  }
+
+  const currentStatus = res.rows[0].status as OrderStatus;
+
+  if (!allowedTransitions[currentStatus].includes(nextStatus)) {
+    throw new ApiError(
+      409,
+      `Cannot change order from ${currentStatus} to ${nextStatus}`
+    );
+  }
+
+  await pool.query(`Update orders SET status = $1 where id = $2`, [
+    nextStatus,
+    orderId,
+  ]);
 };
